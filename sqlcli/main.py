@@ -13,16 +13,23 @@ import prettytable
 from sqlalchemy import create_engine
 from sqlalchemy.exc import *
 
+default_db_url   = os.environ.get('SQLCLI_URL')
+default_ini_file = os.environ.get('SQLCLI_INI_FILE')
+default_ini_item = os.environ.get('SQLCLI_INI_ITEM')
+
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument('--url', '-u')
-    p.add_argument('--config', '-f')
-    p.add_argument('--item', '-i')
+    p.add_argument('--url', '-u',
+            default=default_db_url)
+    p.add_argument('--config', '-f',
+            default=default_ini_file)
+    p.add_argument('--item', '-i',
+            default=default_ini_item)
     p.add_argument('-v', '--verbose', 
             action='store_true', default=False)
     p.add_argument('--pretty', '-p',
             action='store_true', default=False)
-    p.add_argument('--fs', default=',')
+    p.add_argument('--fs', '-F', default=',')
     p.add_argument('command', nargs='+')
     return p.parse_args()
 
