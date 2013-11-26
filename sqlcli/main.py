@@ -1,8 +1,3 @@
-#!/usr/bin/python
-#
-# usage: sqlclient -u <url> <sql command>
-#        sqliclient -f inifile -i section/param <sql command>
-
 import os
 import sys
 import argparse
