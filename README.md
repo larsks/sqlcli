@@ -24,16 +24,29 @@ Or you can add the `--pretty` flag and get output like this:
     | net0-subnet0 |   10.0.0.0/24   |
     +--------------+-----------------+
 
+If you don't specify a SQL query on the command line, `sqlcli` will
+read a query from stdin.
+
 Options
 =======
 
 - `--url`, `-u` *url* -- specify the database url on the command line.
+
+    Defaults to the value of the `SQLCLI_URL` environment variable.
+
 - `--config`, `-f` *path* -- path to an INI-style config file.
+
+    Defaults to the value of `SQLCLI_INI_FILE` environment variable.
+
 - `--item`, `-i` *section*/*param* -- specify the section and
   parameter name from which to extract the url.
+
+    Defaults tot he value of the `SQLCLI_INI_ITEM` environment
+    variable.
+
 - `--verbose`,`-v` -- enable verbose logging
 - `--fs` -- use an output field separator other than `,`
-
+- `--pretty`, `-p` -- generate formatted table output
 
 [sqlalchemy]: http://www.sqlalchemy.org/
 
