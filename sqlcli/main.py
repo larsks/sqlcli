@@ -56,8 +56,9 @@ def main():
         with open(args.config) as fd:
             cfg = iniparse.INIConfig(fd)
             section, param = args.item.split('/')
-            if section in cfg and param in cfg[section]:
-                args.url = cfg[section][param]
+            section = getattr(cfg, section, {})
+            if param in section:
+                args.url = section[param]
 
     if not args.url:
         logging.error('unable to determine database url')
