@@ -78,16 +78,19 @@ def main():
         logging.error('query failed: %s' % detail)
         sys.exit(1)
 
-    if args.pretty:
-        pt = prettytable.PrettyTable(
-            res.keys if isinstance(res.keys, list)
-            else res.keys())
-        for row in res:
-            pt.add_row(row)
-        print pt
-    else:
-        for row in res:
-            print args.fs.join(str(x) for x in row)
+    try:
+        if args.pretty:
+            pt = prettytable.PrettyTable(
+                res.keys if isinstance(res.keys, list)
+                else res.keys())
+            for row in res:
+                pt.add_row(row)
+            print pt
+        else:
+            for row in res:
+                print args.fs.join(str(x) for x in row)
+    except ResourceClosedError:
+        logging.warn('Command completed but returned no results.')
 
 if __name__ == '__main__':
     main()
