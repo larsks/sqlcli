@@ -4,28 +4,43 @@ import argparse
 import logging
 
 import iniparse
+from ConfigParser import NoOptionError
 import prettytable
 from sqlalchemy import create_engine
 from sqlalchemy.exc import *
+
+LOG = logging.getLogger('sqlcli')
 
 default_db_url   = os.environ.get('SQLCLI_URL')
 default_ini_file = os.environ.get('SQLCLI_INI_FILE')
 default_ini_item = os.environ.get('SQLCLI_INI_ITEM')
 
 
+class sqlcliError(Exception):
+    pass
+
+
+class DeprecatedOption(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        raise sqlcliError('Option %s is no longer available' % (
+                          option_string))
+
+
 def parse_args():
     p = argparse.ArgumentParser()
+
     p.add_argument('--url', '-u',
                    default=default_db_url,
                    help='a database connection url')
     p.add_argument('--config', '-f',
+                   nargs=3,
+                   metavar=('PATH', 'SECTION', 'OPTION'),
                    default=default_ini_file,
-                   help='path to an ini-style configuration file')
-    p.add_argument('--item', '-i',
-                   default=default_ini_item,
-                   help='an item from the config file, specified as section/name')
+                   help='path, section, and option for an ini-style configuration file')
     p.add_argument('-v', '--verbose',
-                   action='store_true',
+                   action='store_const',
+                   const='INFO',
+                   dest='loglevel',
                    default=False,
                    help='enable verbose logging')
     p.add_argument('--pretty', '-p',
@@ -35,63 +50,112 @@ def parse_args():
     p.add_argument('--fs', '-F',
                    default=',',
                    help='output field separator')
+    p.add_argument('--item', '-i',
+                   action=DeprecatedOption,
+                   help=argparse.SUPPRESS)
     p.add_argument('command', nargs='?')
+
+    p.set_defaults(loglevel='WARN')
+
     return p.parse_args()
 
 
+def get_database_url():
+    if not args.url and not args.config:
+        raise sqlcliError('you must provide either a url with --url '
+                          'or an ini-format configuration file with '
+                          '--config.')
+
+    if args.url:
+        url = args.url
+    else:
+        inipath, section, option = args.config
+        try:
+            with open(inipath) as fd:
+                cfg = iniparse.ConfigParser()
+                cfg.readfp(fd)
+                url = cfg.get(section, option)
+        except NoOptionError as err:
+            raise sqlcliError('failed to retrieve database connection '
+                              'from %s: %s' % (inipath, err))
+        except IOError as err:
+            raise sqlcliError('failed to open %s: %s' % (inipath, err))
+
+    return url
+
+
+def get_sql_command():
+    if not args.command:
+        LOG.warn('reading sql script from stdin')
+        command = sys.stdin.read()
+    else:
+        command = args.command
+
+    return command
+
+
+def run_sql_command(engine, command):
+    try:
+        res = engine.execute(command)
+    except ProgrammingError as err:
+        raise sqlcliError('sql command failed: %s' % err)
+
+    return res
+
+
+def print_pretty_results(results):
+        pt = prettytable.PrettyTable(
+            results.keys if isinstance(results.keys, list)
+            else results.keys())
+        for row in results:
+            pt.add_row(row)
+        print pt
+
+
+def print_csv_results(results):
+    print '\n'.join(
+        args.fs.join(str(col) for col in row) for row in results)
+
+
+def print_results(results):
+    if results.closed:
+        LOG.warn('Command completed but returned no results.')
+        return
+
+    if args.pretty:
+        print_pretty_results(results)
+    else:
+        print_csv_results(results)
+
+
 def main():
-    args = parse_args()
+    global args
+
     logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARN,
         format='%(asctime)s %(levelname)s: %(message)s',
-        timefmt='%Y-%m-%d %T',
+        datefmt='%Y-%m-%d %T',
     )
 
-    if not args.url and not (args.config and args.item):
-        logging.error('you must provide either a url or an ini file '
-                      'and section/param')
-        sys.exit(1)
+    args = parse_args()
+    logging.getLogger().setLevel(args.loglevel)
 
-    if not args.url:
-        with open(args.config) as fd:
-            cfg = iniparse.INIConfig(fd)
-            section, param = args.item.split('/')
-            section = getattr(cfg, section, {})
-            if param in section:
-                args.url = section[param]
+    url = get_database_url()
+    if not url:
+        raise sqlcliError('unable to determine database url')
+    LOG.info('using url: %s' % url)
 
-    if not args.url:
-        logging.error('unable to determine database url')
-        sys.exit(1)
+    command = get_sql_command()
+    LOG.info('running command: %s' % command)
 
-    if not args.command:
-        args.command = sys.stdin.read()
+    engine = create_engine(url)
+    results = run_sql_command(engine, command)
+    print_results(results)
 
-    logging.info('using url: %s' % args.url)
-
-    engine = create_engine(args.url)
-    logging.info('running command: %s' % args.command)
-
-    try:
-        res = engine.execute(args.command)
-    except ProgrammingError as detail:
-        logging.error('query failed: %s' % detail)
-        sys.exit(1)
-
-    try:
-        if args.pretty:
-            pt = prettytable.PrettyTable(
-                res.keys if isinstance(res.keys, list)
-                else res.keys())
-            for row in res:
-                pt.add_row(row)
-            print pt
-        else:
-            for row in res:
-                print args.fs.join(str(x) for x in row)
-    except ResourceClosedError:
-        logging.warn('Command completed but returned no results.')
+    return 0
 
 if __name__ == '__main__':
-    main()
-
+    try:
+        sys.exit(main())
+    except sqlcliError as err:
+        LOG.error('%s', err)
+        sys.exit(1)
