@@ -4,7 +4,7 @@ import setuptools
 
 setuptools.setup(
     install_requires=open('requires.txt').readlines(),
-    version = 2,
+    version = 3,
     name = 'sqlcli',
     packages = ['sqlcli'],
     entry_points = {
