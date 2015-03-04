@@ -7,6 +7,7 @@ import iniparse
 from ConfigParser import NoOptionError
 import prettytable
 from sqlalchemy import create_engine
+from sqlalchemy.sql import text
 from sqlalchemy.exc import *
 
 LOG = logging.getLogger('sqlcli')
@@ -54,6 +55,7 @@ def parse_args():
                    action=DeprecatedOption,
                    help=argparse.SUPPRESS)
     p.add_argument('command', nargs='?')
+    p.add_argument('params', nargs=argparse.REMAINDER, default=[])
 
     p.set_defaults(loglevel='WARN')
 
@@ -94,9 +96,13 @@ def get_sql_command():
     return command
 
 
-def run_sql_command(engine, command):
+def run_sql_command(engine, command, params=None):
+    if params is None:
+        params = {}
+
+    command = text(command)
     try:
-        res = engine.execute(command)
+        res = engine.execute(command, **params)
     except ProgrammingError as err:
         raise sqlcliError('sql command failed: %s' % err)
 
@@ -145,10 +151,11 @@ def main():
     LOG.info('using url: %s' % url)
 
     command = get_sql_command()
+    params = dict(p.split('=', 1) for p in args.params)
     LOG.info('running command: %s' % command)
 
     engine = create_engine(url)
-    results = run_sql_command(engine, command)
+    results = run_sql_command(engine, command, params)
     print_results(results)
 
     return 0
